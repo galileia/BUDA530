@@ -1,0 +1,126 @@
+```{r}
+install.packages("ISLR")
+install.packages("faraway")
+library(ISLR)
+library(dplyr)
+library(faraway)
+
+```
+
+```{r}
+#data
+attach(Smarket)
+summary(Smarket)
+```
+
+```{r}
+#plot all variables
+pairs(Smarket)
+```
+
+```{r}
+head(Smarket)
+
+#remove `Direction` since it's not numeric
+cor(Smarket[, -9])
+```
+
+```{r}
+boxplot(Volume ~ Direction)
+plot(Volume)
+```
+Logistic regression
+```{r}
+glm_all <- glm(Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume, data = Smarket, family = binomial)
+summary(glm_all)
+```
+```{r}
+coef(glm_all)
+```
+
+```{r}
+summary(glm_all)$coefficients
+```
+
+predict probabilities
+```{r}
+#predict "down" or "up" direction, but how do we know which one is which?
+contrasts(Direction)
+#now we know that 1 is Up and 0 is Down so prob > 0.5 is Up and prob < 0.5 is Down 
+```
+
+```{r}
+glm_all_probs <- predict(glm_all, type = "response")
+head(glm_all_probs)
+```
+```{r}
+plot(predict(glm_all))
+```
+
+```{r}
+glm_all_pred <- rep("Down", 1250)
+glm_all_pred[glm_all_probs > 0.5] = "Up"
+```
+
+```{r}
+table(glm_all_pred, Direction)
+mean(glm_all_pred == Direction)
+
+#training error
+1 - mean(glm_all_pred == Direction)
+```
+Same exercise but now break the data into train set to train the model and test set to test the model
+```{r}
+set.seed(1)
+
+#select 250 random data points from Smarket$Year
+train = sample(Year, 250)
+train = Year == train
+
+#generate train and test datasets 
+Smarket_train <- Smarket[!train,]
+Smarket_test <- Smarket[train,]
+
+```
+
+```{r}
+#create model with train data set 
+glm_model <- glm(Direction ~ Lag1 + Lag2 + Lag3 + Lag4 + Lag5 + Volume, data = Smarket_train, family = binomial)
+summary(glm_model)
+```
+```{r}
+#predict with test dataset 
+glm_model_probs <- predict(glm_model, data = Smarket_test, type = "response")
+glm_model_pred <- rep("Down", 1250)
+glm_model_pred[glm_model_probs > 0.5] = "Up"
+table(glm_model_pred, Direction)
+
+#testing error
+1 - mean(glm_model_pred == Direction)
+```
+Change the model to use lowerst p-value variables only 
+```{r}
+glm_model1 <- glm(Direction ~ Lag1 + Lag2, data = Smarket_train, family = binomial)
+glm_model1_probs <- predict(glm_model1, data = Smarket_test, type = "response")
+
+glm_model1_pred <- rep("Down", 1250)
+glm_model1_pred[glm_model1_probs > 0.5] = "Up"
+table(glm_model1_pred, Direction)
+
+#testing error
+1 - mean(glm_model1_pred == Direction)
+
+```
+additional insights from faraway
+```{r}
+#model coefficients
+beta <- coefficients(glm_model1)
+
+#model odds
+exp_beta <- exp(beta)
+
+#model probabilities
+prob_beta <- ilogit(beta)
+
+cbind(beta, exp_beta, prob_beta)
+```

@@ -1,0 +1,18 @@
+---
+title: "Boston"
+author: "team4"
+date: '2018-02-01'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#install.packages("ISLR")
+#library(MASS)
+#data(Boston)
+
+```
+Using the Boston data set, fit classification models in order to predict whether a given suburb has a crime rate above or below the median. 
+
+
