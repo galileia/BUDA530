@@ -12,7 +12,7 @@ Try executing this chunk by clicking the *Run* button within the chunk or by pla
 data("Default")
 ```
 
-#Using the `Default` dataset to understand logistic regression modeling for binary responses
+####Using the `Default` dataset to understand logistic regression modeling for binary responses
 
 ```{r}
 #the data 
@@ -35,7 +35,7 @@ The probability of `default` given `balance` can be written as: Pr(default = Yes
 The values of p(balance) will range between 0 and 1 
 
 ```{r}
-#built the generalized linear model
+#build the generalized linear model
 model = glm(default ~ balance, data = Default, family = binomial)
 summary(model)
 ```
@@ -112,7 +112,7 @@ non_student = 0
 ```
 Students have a 4% probability of defaulting whereas non-students have a 2.9% probability of defaulting 
 
-#Multiple logistic regression 
+####Multiple logistic regression 
 What if we have multiple predictors? Student, income in thousands of dollars and default in dollars
 ```{r}
 model3 = glm(default ~ student + income + balance, data = Default, family = binomial)
@@ -132,18 +132,13 @@ A boxplot of student status vs credit card balance shows that students have a hi
 par(mfrow = c(1, 2))
 boxplot(Default$balance ~ Default$student)
 ```
-```{r}
-
-#plot(default ~ balance, Default)
-#curve(ilogit(coeff[1] + coeff[2]*0 + coeff[3]*0 + coeff[4]*x), add = TRUE)
-```
 
 ```{r}
-#lets calculate the risk of a student with an income of 20,000 and a balance of 1500 defaulting
+#calculate the risk of a student with an income of 20,000 and a balance of 1500 defaulting
 ilogit(coeff[1] + coeff[2]*1 + coeff[3]*20 + coeff[4]*1500)
 ```
 ```{r}
-#lets calculate the risk of a non-student with an income of 20,000 and a balance of 1500 defaulting
+#calculate the risk of a non-student with an income of 20,000 and a balance of 1500 defaulting
 ilogit(coeff[1] + coeff[2]* + coeff[3]*20 + coeff[4]*1500)
 ```
 The probability for the student is 5% and non-student is 9%. 
@@ -165,11 +160,11 @@ c
 Explain the coefficients:
 The odds corresponding to student status is 0.52. This implies that if we maintain the income and balance the same, being a student decreases the odds of defaulting by 0.52. If we fix the income and credit card balance, the probability of a student defaulting is 34%. 
 
-#Generalized linear model inference & selection
+####Generalized linear model inference & selection
 
 ```{r}
 #we can use the deviance and null deviance to make hypothesis tests to compare models 
-names(model3)
+#names(model3)
 
 #extract deviances and degrees of freedom
 d_null <- model3$null.deviance
@@ -217,7 +212,7 @@ Confidence intervals:
 confint(model5)
 ```
 
-#Goodness of fit 
+####Goodness of fit 
 ```{r}
 #The predict function is used to predict the probability that an individual will default
 model5_prob <- predict(model5, type = "response")
@@ -279,7 +274,7 @@ summary(model6)
 ```
 ```{r}
 #predict on test subset 
-model6_prob <- predict(model6, Defaul_test, type = "response")
+model6_prob <- predict(model6, Default_test, type = "response")
 ```
 
 ```{r}
@@ -294,28 +289,33 @@ model6_pred[model6_prob > 0.5] = "Yes"
 
 table(model6_pred, default_test)
 ```
-```{r}
-(4830 + 53) / 5020
 
-#or:
+
+
+```{r}
+4833 / (4833 + 54)
+
+#or
 mean(model6_pred == default_test)
 
 #testing error rate
+1- (4833 / (4833 + 54))
+#or
 mean(model6_pred != default_test)
 ```
-We predicted correctly 97.3% of the time. The testing error rate is 2.7%. We are confident in this error rate because we trained and tested the model with 2 different subsets of the data. 
+We predicted correctly 98.9% of the time. The testing error rate is 1.1%. We are confident in this error rate because we trained and tested the model with 2 different subsets of the data. 
 
-#Model specificity 
+####Model specificity 
 ```{r}
 #specificity: for individuals who will not default, how many did we predict would not default?
-4830 / (4830 + 123)
+4833 / (4833 + 120)
 ```
 
 ```{r}
 #sensitivity: for individuals who will default, how many did we predict would default?
-53 / (14 + 53)
+54 / (13 + 54)
 ```
-Recall that in line 293 we used the threshold of 0.5 to split default = yes for probabilities > 0.5 and default = no for probabilities < 0.5. We can change the threshold to improve the sensitivity but this will cause the  specificity to decrease:
+Recall that we used the threshold of 0.5 to split default = yes for probabilities > 0.5 and default = no for probabilities < 0.5. We can change the threshold to improve the sensitivity but this will cause the  specificity to decrease:
 ```{r}
 #directly from faraway 
 
