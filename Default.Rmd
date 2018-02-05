@@ -1,0 +1,345 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+#library(ISLR)
+data("Default")
+```
+
+#Using the `Default` dataset to understand logistic regression modeling for binary responses
+
+```{r}
+#the data 
+summary(Default)
+```
+
+```{r}
+par(mfrow = c(1, 2))
+boxplot(Default$income ~ Default$default)
+boxplot(Default$balance ~ Default$default)
+```
+
+```{r}
+#the contrast function allows us to see the r default coding for the variables 
+contrasts(Default$default)
+#Yes = 1, No = 0
+#would like to use the model to predict `default = Yes` using `balance`
+```
+The probability of `default` given `balance` can be written as: Pr(default = Yes | balance)
+The values of p(balance) will range between 0 and 1 
+
+```{r}
+#built the generalized linear model
+model = glm(default ~ balance, data = Default, family = binomial)
+summary(model)
+```
+```{r}
+coefficients(model)
+```
+
+`balance` has a very small p-value suggesting that there is an association between balance and the probability of default. The coefficient for `balance` is positive indicating that an increase in balance is associated with an increase in probability of default. 
+
+A one-unit increase in `balance` is associated with an increase in the log odds of `default` by 0.005 units. 
+
+once the coefficients are estimated, we can calculate the probability of `default` for any given credit card `balance`
+
+
+```{r}
+#assume an individual has a balance of $2000, predict the probability that this individual will default
+
+x = 2000
+ilogit(-10.651330614 + 0.005498917 * x)
+```
+The probability this individual will default is 58.6%
+
+```{r}
+#we can also use the predict function 
+prob <- predict.glm(model, data.frame(balance = 2000), type = "response", se.fit = TRUE)
+prob$fit
+```
+we get the same probability of 58.6%
+
+
+```{r}
+#what are the odds that an individual with a balance of $3000 will default?
+
+x = 3000
+y = ilogit(-10.651330614 + 0.005498917 * x)
+y
+
+y/(1 - y)
+```
+There is a 99.7% probability that an individual with a $3000 balance will default. 
+The odds are 346 to 1 that the individual will default 
+
+```{r}
+#what are the odds that an individual with a balance of $500 will default?
+
+x = 500
+y = ilogit(-10.651330614 + 0.005498917 * x)
+y
+
+y/(1 - y)
+```
+
+There is less than 0.1% probability that an individual with a $500 balance will default. The odds of defaulting are 1 in 0.0004
+
+
+What is the probability that a student will default?
+```{r}
+contrasts(Default$student)
+#is a student = 1, is not a student = 0
+```
+
+```{r}
+model2 = glm(default ~ student, data = Default, family = binomial)
+summary(model2)
+```
+In this model R assigns a dummy variable to student status with a value 1 for student and 0 for non student. The coefficient for student is 0.41 and statistically significant indicating that being a student is associated with defaulting:
+```{r}
+
+student = 1
+non_student = 0
+
+(stud_prob <- ilogit(-3.50413 + 0.40489 * student))
+(non_stud_prob <- ilogit(-3.50413 + 0.40489 * non_student))
+```
+Students have a 4% probability of defaulting whereas non-students have a 2.9% probability of defaulting 
+
+#Multiple logistic regression 
+What if we have multiple predictors? Student, income in thousands of dollars and default in dollars
+```{r}
+model3 = glm(default ~ student + income + balance, data = Default, family = binomial)
+summary(model3)
+```
+```{r}
+#extract coefficients
+(coeff <- coefficients(model3))
+```
+
+
+The p-values associated with `student` and balance are very small indicating that these variables are associated with defaulting; but the dummy variable for `student` = Yes is negative indicating that for a fixed value of income and balance students are less likely to default than non-students, which is at first glance inconsistent of the result we got with the single variable model. 
+
+A boxplot of student status vs credit card balance shows that students have a higher balance (higher debt) which is associated with higher chances of default. So even though an individual student with the same balance as a non-student has lower probability of defaulting, students in general tend to have higher balances resulting in higher default probabilities of defaulting than non-students. 
+
+```{r}
+par(mfrow = c(1, 2))
+boxplot(Default$balance ~ Default$student)
+```
+```{r}
+
+#plot(default ~ balance, Default)
+#curve(ilogit(coeff[1] + coeff[2]*0 + coeff[3]*0 + coeff[4]*x), add = TRUE)
+```
+
+```{r}
+#lets calculate the risk of a student with an income of 20,000 and a balance of 1500 defaulting
+ilogit(coeff[1] + coeff[2]*1 + coeff[3]*20 + coeff[4]*1500)
+```
+```{r}
+#lets calculate the risk of a non-student with an income of 20,000 and a balance of 1500 defaulting
+ilogit(coeff[1] + coeff[2]* + coeff[3]*20 + coeff[4]*1500)
+```
+The probability for the student is 5% and non-student is 9%. 
+```{r}
+#log odds = coeff
+#odds = exp(coeff)
+#probabilities = ilogit(coeff)
+
+#remember that: 
+#log odds = 0, then p = 0.5
+#log odds > 0, then p > 0.5
+#log odds < 0, then p < 0.5
+
+
+c <- rbind(log_odds = coeff, odds = exp(coeff), probab = ilogit(coeff))
+options(digits = 3)
+c
+```
+Explain the coefficients:
+The odds corresponding to student status is 0.52. This implies that if we maintain the income and balance the same, being a student decreases the odds of defaulting by 0.52. If we fix the income and credit card balance, the probability of a student defaulting is 34%. 
+
+#Generalized linear model inference & selection
+
+```{r}
+#we can use the deviance and null deviance to make hypothesis tests to compare models 
+names(model3)
+
+#extract deviances and degrees of freedom
+d_null <- model3$null.deviance
+d <- model3$deviance
+
+df_null <- model3$df.null
+df <- model3$df.residual
+
+#the p-value for the test that at least one of the predictors is related to the response is:
+1 - pchisq(d_null - d, df_null - df)
+```
+The p-value is very small so we can conclude that at least one of the predictors is related to the response. We can also check with the anova:
+```{r}
+#null model:
+model_null <- glm(default ~ 1, family = binomial, data = Default)
+anova(model_null, model3, test = "Chi")
+```
+the p-value is highly significant providing strong evidence that we can reject the null and conclude that at least one of the predictors is related to the response
+
+
+When we go back to the summary we see that in a model with student status and income, income is not significant. We can drop it from the model and again use anova to compare the models 
+```{r}
+summary(model3)
+```
+
+```{r}
+#simpler model without balance:
+model4 <- glm(default ~ student + balance, family = binomial, data = Default)
+summary(model4)
+anova(model4, model3, test = "Chi")
+```
+The p-value is large, so we use the smaller model. We can also use AIC and do model selection by using the step function:
+```{r}
+step(model3, direction = "backward", k = 2)
+```
+The step function dropped the income variable and gave us the same answer as the previous step. We select the model with student and balance as the predictors. 
+```{r}
+model5 <- glm(default ~ student + balance, family = binomial, data = Default)
+summary(model5)
+```
+Student and balance are both significant in model5.
+
+Confidence intervals:
+```{r}
+confint(model5)
+```
+
+#Goodness of fit 
+```{r}
+#The predict function is used to predict the probability that an individual will default
+model5_prob <- predict(model5, type = "response")
+```
+
+```{r}
+#how do we know which is which? we use the contrasts function and see that default = Yes is 1, default = No is 0
+contrasts(Default$default)
+```
+That means that any value above 0.5 corresponds to the probability of the individual defaulting and any value below 0.5 corresponds to the probability of the individual not defaulting. 
+```{r}
+plot(model5_prob)
+```
+In order to predict if an individual will default or not we convert the probabilities into class labels `Yes` for default and `No` for no-default:
+```{r}
+#create a vector of 10000 "No" elements:
+model5_pred <- rep("No", 10000)
+#Replace the ones with probability > 0.5 with "Yes"
+model5_pred[model5_prob > 0.5] = "Yes"
+```
+
+We use the table function to produce a confusion matrix to determine how many observations were correctly or incorrectly classified:
+```{r}
+table(model5_pred, Default$default)
+```
+Correct predictions on the diagonal:
+9,628 "No" correct predictions
+105 "Yes" correct predictions
+
+```{r}
+(9628 + 105) / 10000
+
+#or:
+
+mean(model5_pred == Default$default)
+```
+We predicted correctly 97.3% of the time 
+
+```{r}
+#the training error rate:
+1 - 0.973
+```
+is 2.7%. This looks really good, but we trained and tested the model on the same data set. We know that the training error underestimates the testing error. To correct this we can split the data into training and testing subsets
+```{r}
+set.seed(100)
+
+#randomly sample 1000 Yes and 1000 No elements from Default
+train1 <- sample(Default$default == "Yes", 1000, replace = FALSE)
+train2 <- sample(Default$default == "No", 1000, replace = FALSE)
+Default_train <- Default[c(train1, train2),]
+Default_test <- Default[!c(train1, train2),]
+
+```
+
+```{r}
+#train model with train subset 
+model6 <- glm(default ~ student + balance, family = binomial, data = Default_train)
+summary(model6)
+```
+```{r}
+#predict on test subset 
+model6_prob <- predict(model6, Defaul_test, type = "response")
+```
+
+```{r}
+#compute the predictions for the test subset and compare with the actual defaults 
+#first need the subset of actual defaults to compare with:
+default_test <- Default$default[!c(train1, train2)]
+
+#create a vector of 5020 "No" elements:
+model6_pred <- rep("No", 5020)
+#Replace the ones with probability > 0.5 with "Yes"
+model6_pred[model6_prob > 0.5] = "Yes"
+
+table(model6_pred, default_test)
+```
+```{r}
+(4830 + 53) / 5020
+
+#or:
+mean(model6_pred == default_test)
+
+#testing error rate
+mean(model6_pred != default_test)
+```
+We predicted correctly 97.3% of the time. The testing error rate is 2.7%. We are confident in this error rate because we trained and tested the model with 2 different subsets of the data. 
+
+#Model specificity 
+```{r}
+#specificity: for individuals who will not default, how many did we predict would not default?
+4830 / (4830 + 123)
+```
+
+```{r}
+#sensitivity: for individuals who will default, how many did we predict would default?
+53 / (14 + 53)
+```
+Recall that in line 293 we used the threshold of 0.5 to split default = yes for probabilities > 0.5 and default = no for probabilities < 0.5. We can change the threshold to improve the sensitivity but this will cause the  specificity to decrease:
+```{r}
+#directly from faraway 
+
+#threshold range
+thresh <- seq(0.01, 0.5, 0.01)
+
+#sens and spec variables
+sens <- numeric(length(thresh))
+spec <- numeric(length(thresh))
+
+for(j in seq(along = thresh)) {
+        a <- ifelse(model6_prob < thresh[j], "No", "Yes")
+        b <- xtabs(~ default_test + a, Default)
+        spec[j] <- b[1,1]/(b[1,1] + b[1,2])
+        sens[j] <- b[2,2]/(b[2,1] + b[2,2])
+}
+
+#plot
+matplot(thresh, cbind(sens, spec), type = "l")
+```
+The plot shows the sensitivity increasing and the specificity decreasing as we decrease the threshold. We notice that the specificity doesnt drop that much from 0.5 to 0.2 even though there is a substantial improvement to the sensitivity so we could definitely drop the threshold. 
+
+Plot the ROC (true positive vs false positive)
+```{r}
+plot(1 - spec, sens, type = "l")
+```
+
