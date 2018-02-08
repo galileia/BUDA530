@@ -1,0 +1,124 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+install.packages("pscl")
+library(pscl)
+install.packages("caret")
+library(caret)
+install.packages("ROCR")
+library(ROCR)
+```
+
+
+Use the crab.tx data to understand Poisson regression 
+The starting point for count data is a GLM with Poisson-distributed errors, but not all count data meet the assumptions of the Poisson distribution. Thus, we need to test if the variance > mean or if the number of zeros is greater than expected. 
+
+Data
+Each female horseshoe crab in the study had a male crab attached to her in her nest. The study investigated factors that affect whether the female crab had any other males, called satellites, residing near her. Explanatory variables that are thought to affect this included the female crab’s color (C), spine condition (S), weight (Wt), and carapace width (W). The response outcome for each female crab is her number of satellites (Sa). There are 173 females in this study. 
+
+```{r}
+#read file
+crab <- read.table("crab.txt")
+colnames(crab) <- c("Obs","C","S","W","Wt","Sa")
+head(crab)
+
+#remove the column labeled "Obs"
+crab <- crab[,-1]
+head(crab)
+names(crab)
+
+```
+This is a count dataset: Sa is the count of attached satellites for each female crab
+
+Let’s first see if the width of female's back can explain the number of satellites attached. We will start by fitting a Poisson regression model with only one predictor, width (W) 
+```{r}
+#Poisson Regression of Sa on W
+model1 <- glm(Sa ~ W, family = poisson, data = crab)
+summary(model1)
+
+```
+Interpretation:
+The model is $log(μi hat) = -3.30476 + 0.16405Wi$
+The coefficient for W is significant given its small p-value; since it is > 0, the greater the width, the larger the number of expected sattelites: 
+
+```{r}
+(exp_coeff <- exp(0.16405))
+```
+For one unit increase of the crab's width, the number of $Sa$ will increase and get multiplied by 1.18
+
+Is the model a good fit?
+Deviance is the fit of the observed values (Y) to the expected values ( ˆ Y ).  The bigger the difference (or "deviance") of the observed values from the expected values, the poorer the fit of the model.  So, we want a small deviance if possible.  As we add more variables to the equation the deviance should get smaller, indicating an improvement in fit.   
+Residual deviance: $567.88$  on $171$  degrees of freedom
+```{r}
+#extract the residuals deviance and df
+d <- model1$deviance
+df <- model1$df.residual
+
+#calculate chisq
+1 - pchisq(d, df)
+
+```
+Poisson model does not fit the data (p < 0.05)
+
+
+McFadden’s R2, which is defined as 1−[ln(LM)/ln(L0)] where ln(LM) is the log likelihood value for the fitted model and ln(L0) is the log likelihood for the null model with only an intercept as a predictor. The measure ranges from 0 to just under 1, with values closer to zero indicating that the model has no predictive power.
+```{r}
+pR2(model1)  # look for 'McFadden'
+```
+
+The conclusion from this exercise is that the model does not fit well. The lack of fit maybe due to missing data, covariates or overdispersion. Lets check the relationship between the mean and variance 
+```{r}
+model1_mean <- log(fitted(model1))
+model1_var <- log((crab$Sa-fitted(model1))^2)
+
+plot(model1_mean, model1_var)
+abline(0,1)
+```
+We see some dispersion of the data. If our assumption was met then the points would be tightly grouped around that line.
+
+
+```{r}
+#calculate and plot prediction and SE for model 
+model1_pred <- predict(model1, type = "response")
+model1_SE <- predict(model1, type = "response", se.fit = TRUE)$se.fit
+
+par(mfrow = c(1, 2))
+plot(model1_pred, model1_SE)
+plot(model1_pred, crab$Sa)
+```
+Run negative binomial model 
+```{r}
+model2 <- glm.nb(Sa ~ W, data = crab)
+summary(model2)
+```
+The model estimates the dispersion parameter as 0.905 indicating underdispersion. Test for goodness of fit:
+```{r}
+#use summary extractions
+1 - pchisq(summary(model2)$deviance, summary(model2)$df.residual)
+```
+p > 0.05, so good fit 
+
+```{r}
+#calculate and plot prediction and SE for model 
+model2_pred <- predict(model2, type = "response")
+model2_SE <- predict(model2, type = "response", se.fit = TRUE)$se.fit
+
+par(mfrow = c(1, 2))
+plot(model2_pred, model1_SE)
+plot(model2_pred, crab$Sa)
+```
+
+```{r}
+#now we can compare the SEs for both models 
+plot(model2_SE, model1_SE)
+```
+
+
+
+
+
+
+
