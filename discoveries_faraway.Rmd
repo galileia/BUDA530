@@ -6,118 +6,181 @@ output: html_notebook
 
 
 ```{r}
-library(faraway)
+#install.packages("faraway")
+#install.packages("tscount")
+install.packages("pscl")
 
-install.packages("tscount")
-library(tscount)
+
+library(faraway); library(MASS); library(pscl)
+
+#data
 data("discoveries")
 ```
 
 
 Problem 1:  The discoveries dataset in the faraway package lists the numbers of "great" inventions and scientific discoveries in each year from 1860-1959.  Investigate the number of discoveries over time.  Use the appropriate Poisson model to fit the number of discoveries against the year.  Hint you may need to create this.  Comment on any findings of the model you have.
 ```{r}
+head(discoveries)
+
 summary(discoveries)
 plot(discoveries, main = "Number of Discoveries")
 ```
-
+Some exploration of the data
 ```{r}
-ts(discoveries)
+#test whether discoveries is a time series object
+ts(discoveries) 
+time(discoveries)
 
 ```
 Frequency = 1 => yearly data 
 
 
-A plot of number of discoveries vs time shows some increase from 1860 to early 1900's with a peak in number of discoveries in the early 1980's. The average number of discoveries remains around the mean of 3.1 per year until about 1930 when we see a steady decline until 1960. 
+A plot of number of discoveries vs time shows some increase from 1860 to early 1900's with a peak in number of discoveries in the early 1880's. The average number of discoveries remains around the total mean of 3.1 per year until about 1930 when we see a steady decline until 1959. 
 ```{r}
 mean(discoveries)
 plot(discoveries, main = "Number of Discoveries")
 abline(mean(discoveries), 0, col = "red")
 
 ```
-We first fit a linear regression model to see what we get:
+We calculate the mean of number of discoveries pre and post 1930 and see a clear step down from 3.6 to 1.9 per year. 
+
 ```{r}
-model0 <- lm(discoveries ~ ., data = discoveries)
+#check mean pre and post 1930
+disc_pre1930 <- window(discoveries, start = 1860, end = 1930)
+disc_post1930 <- window(discoveries, start = 1930, end = 1959)
+
+mean(disc_pre1930)
+mean(disc_post1930)
+
+```
+
+```{r}
+#plots with both means
+par(mfrow = c(1, 2))
+plot(disc_pre1930, main = "Discoveries pre-1930", ylim = c(0, 12))
+abline(mean(disc_pre1930), 0, col = "red")
+
+plot(disc_post1930, main = "Discoveries post-1930", ylim = c(0, 12))
+abline(mean(disc_post1930), 0, col = "blue")
+
+```
+
+We first fit a linear regression model to see what we get. The negative slope indicates # of discoveries reduces with time. The $r^2$ is very small indicating the poor fit of the model as expected. We see some curvature in the residual plots.
+```{r}
+n_discoveries <- as.numeric(discoveries)
+d_discoveries = data.frame(n_discoveries)
+d_discoveries$year = 1860:1959
+
+model0 <- lm(n_discoveries ~ year, data = d_discoveries)
 summary(model0)
 
 ```
-The "essentially perfect fit" is suspicious. Looking at the residual plots there's a clear outlier in the data:
 
 
 ```{r}
 par(mfrow = c(2, 2))
 plot(model0)
-```
-Attempr to refit, removing the outlier:
-```{r}
-dim(discoveries)
-disc_out <- di
+
 ```
 
-
-
-
-
-
+Check the predicted values. The linear model is consistent with the initial observation that number of discoveries is decreasing with time. 
 ```{r}
-model1 <- glm(discoveries ~ x, family = poisson, data = discoveries)
+#calculate model predictions
+model0_pred <- predict(model0)
+
+#transform into time series
+disc_pred <- ts(model0_pred, start = c(1860, 1), end = c(1959, 1), frequency = 1)
+
+plot(discoveries)
+points(disc_pred, pch = 3, col = "red")
+
+```
+
+
+
+We fit a poisson regression model since this is a count type data. The model is is $log(μi hat) = 0.25696 + 0.22869 xi$. The coefficient for x is significant given its small p-value; since it is > 0, the greater the time, the larger the number of expected discoveries, or for one unit increase of time (1 year), the number of discoveries will increase and get multiplied by 1.26. The coefficient for x is the multiplicative term to calculate the estimated number of discoveries when time increases by 1 unit (1 year). See a significant reduction in deviance from the null model. 
+```{r}
+model1 <- glm(discoveries ~ ., family = poisson(link = "log"), data = discoveries)
 summary(model1)
-```
-The model is $log(μi hat) = 0.25696 + 0.22869 xi$
 
-The coefficient for x is significant given its small p-value; since it is > 0, the greater the time, the larger the number of expected discoveries, or for one unit increase of time (1 year), the number of discoveries will increase and get multiplied by 1.26
-
-```{r}
-(exp_coeff <- exp(0.22869))
 ```
 
-Is the model a good fit?
+Is the model a good fit? The p-value is large indicating no evidence of a lack of fit. We can use ANOVA to compare the current model with a null model and we observe the same conclusion. 
+
 ```{r}
 1 - pchisq(deviance(model1), df.residual(model1))
-```
-The p-value is large indicating no evidence of a lack of fit. We can compare the current model with a null model and we observe the same conclusion. 
-```{r}
+
 anova(model1, test = "Chi")
 ```
 
-Model diagnostics 
+
+Model diagnostics. We see the same outlier point 26. We also see some non-constant variance in the residuals
 ```{r}
 par(mfrow = c(2, 2))
 plot(model1)
 ```
-Seem to have an outlier point 26. We also see non-constant variance in the residuals  The lack of fit maybe due to dispersion. Check the relationship between the mean and variance:
+We can check if we have an issue with dispersion by plotting the relationship between the mean and variance. We see some dispersion of the data and this may be the reason why the residual plot is not so great. 
 
 ```{r}
 model1_mean <- log(fitted(model1))
 model1_var <- log((discoveries-fitted(model1))^2)
 
+par(mfrow = c(1, 2))
 plot(model1_mean, model1_var)
-abline(0,1)
+abline(0,1, col = "blue")
 ```
-We see some dispersion of the data. How well is the model predicting?
+
+How well is the model predicting? Visually the model appears to do a good job at prediction. We see that the model predicts slightly higher than the lowest actuals and slightly lower than the highest actuals. The mean of the predicted values is the same as the mean of the actual number of discoveries
 ```{r}
-pred <- predict(model1, type = "response")
-plot(pred, discoveries)
+#calculate model predictions
+model1_pred <- predict(model1, type = "response")
+
+#transform into time series
+disc_pred1 <- ts(model1_pred, start = c(1860, 1), end = c(1959, 1), frequency = 1)
+
+plot(discoveries)
+points(disc_pred1, pch = 20, col = "red")
 
 ```
 
-Run a negative binomial model: 
 ```{r}
-model2 <- glm.nb(discoveries ~ x, data = discoveries)
-summary(model2)
+#compare mean of prediction with mean of the data
+mean(disc_pred1)
+mean(discoveries)
 ```
-We got an error message and theta is really large. Try using the quasipoisson:
 
+
+Try using the quasipoisson model:
 ```{r}
-model_disp <- glm(discoveries ~ x, family = quasipoisson(link = log), data = discoveries)
+model_disp <- glm(discoveries ~ ., family = quasipoisson(link = log), data = discoveries)
 summary.glm(model_disp)
 
+par(mfrow = c(2, 2))
+plot(model_disp)
+
 ```
-Residuals 
+There doesnt appear to be a difference between the models.
+
 ```{r}
-par(mfrow = c(1, 3))
-plot(residuals(model2) ~ predict(model2, type = "response"))
-plot(residuals(model2) ~ predict(model2, type = "link"))
-plot(residuals(model2, type = "response") ~ predict(model2, type = "response"))
+#calculate model predictions
+model_disp_pred <- predict(model_disp, type = "response")
+
+#transform into time series
+disc_pred_disp <- ts(model_disp_pred, start = c(1860, 1), end = c(1959, 1), frequency = 1)
+
+plot(discoveries)
+points(disc_pred_disp, pch = 20, col = "green")
+
+
+```
+Lastly we try a zero-inflated regression. It is similar in application to Poisson regression, but allows for an abundance of zeros in the dependent count variable
+```{r}
+model_zinf <- zeroinfl(discoveries ~ 1, data = discoveries, dist = "poisson")
+summary.glm(model_zinf)
+
+par(mfrow = c(2, 2))
+plot(model_zinf)
+
 ```
 
 
@@ -126,6 +189,31 @@ plot(residuals(model2, type = "response") ~ predict(model2, type = "response"))
 
 
 
+
+We noticed earlier how the trend changes after 1930. It would be interesting to fit the model to the pre-1930s data and see how the model prediction after 1930 differs from actual number of discoveries
+```{r}
+#disc_pre1930
+
+model3 <- glm(disc_pre1930 ~ ., family = poisson(link = "log"), data = disc_pre1930)
+summary(model3)
+```
+```{r}
+#calculate model predictions
+model_pre1930 <- predict(model3, type = "response")
+
+#transform into time series
+disc_pre1930 <- ts(model_pre1930, start = c(1860, 1), end = c(1960, 1), frequency = 1)
+
+plot(discoveries)
+points(disc_pre1930, pch = 20, col = "blue")
+plot(disc_pre1930, col = "blue")
+
+```
+
+second try 
+```{r}
+??crossbasis
+```
 
 
 
