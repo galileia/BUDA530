@@ -8,10 +8,10 @@ output: html_notebook
 ```{r}
 #install.packages("faraway")
 #install.packages("tscount")
-install.packages("pscl")
+#install.packages("pscl")
 
 
-library(faraway); library(MASS); library(pscl)
+#library(faraway); library(MASS); library(pscl)
 
 #data
 data("discoveries")
@@ -65,7 +65,7 @@ abline(mean(disc_post1930), 0, col = "blue")
 
 ```
 
-We first fit a linear regression model to see what we get. The negative slope indicates # of discoveries reduces with time. The $r^2$ is very small indicating the poor fit of the model as expected. We see some curvature in the residual plots.
+We first fit a linear regression model. The negative slope indicates # of discoveries reduces with time. The $r^2$ is very small indicating the poor fit of the model as expected. We see some curvature in the residual plots.
 ```{r}
 n_discoveries <- as.numeric(discoveries)
 d_discoveries = data.frame(n_discoveries)
@@ -83,7 +83,7 @@ plot(model0)
 
 ```
 
-Check the predicted values. The linear model is consistent with the initial observation that number of discoveries is decreasing with time. 
+We plot the predicted values. The linear model is consistent with the initial observation that number of discoveries is decreasing with time. 
 ```{r}
 #calculate model predictions
 model0_pred <- predict(model0)
@@ -99,6 +99,7 @@ points(disc_pred, pch = 3, col = "red")
 
 
 We fit a poisson regression model since this is a count type data. The model is is $log(μi hat) = 0.25696 + 0.22869 xi$. The coefficient for x is significant given its small p-value; since it is > 0, the greater the time, the larger the number of expected discoveries, or for one unit increase of time (1 year), the number of discoveries will increase and get multiplied by 1.26. The coefficient for x is the multiplicative term to calculate the estimated number of discoveries when time increases by 1 unit (1 year). See a significant reduction in deviance from the null model. 
+It seems that the coefficient should be < 0 to indicate a reduction in discoveries with time. We also see that the residual deviance is much greater than the degrees of freedom. 
 ```{r}
 model1 <- glm(discoveries ~ ., family = poisson(link = "log"), data = discoveries)
 summary(model1)
@@ -119,7 +120,7 @@ Model diagnostics. We see the same outlier point 26. We also see some non-consta
 par(mfrow = c(2, 2))
 plot(model1)
 ```
-We can check if we have an issue with dispersion by plotting the relationship between the mean and variance. We see some dispersion of the data and this may be the reason why the residual plot is not so great. 
+We can check if we have an issue with dispersion by plotting the relationship between the mean and variance. We see some dispersion of the data and this may be the reason for the poor fit since for a poisson model to be valid the mean and the variance should be the same.  
 
 ```{r}
 model1_mean <- log(fitted(model1))
@@ -141,6 +142,7 @@ disc_pred1 <- ts(model1_pred, start = c(1860, 1), end = c(1959, 1), frequency = 
 plot(discoveries)
 points(disc_pred1, pch = 20, col = "red")
 
+plot(d_discoveries$n_discoveries, model1_pred)
 ```
 
 ```{r}
@@ -149,71 +151,52 @@ mean(disc_pred1)
 mean(discoveries)
 ```
 
-
-Try using the quasipoisson model:
+Since there are some years with no discoveries we'll use the zero inflated count model to attempt a better fit. 
 ```{r}
-model_disp <- glm(discoveries ~ ., family = quasipoisson(link = log), data = discoveries)
-summary.glm(model_disp)
+#numeric data 
+d_discoveries
+d_discoveries$index <- seq(1, 100, length.out = 100)
 
-par(mfrow = c(2, 2))
-plot(model_disp)
+#fit the model 
+model_zinf <- zeroinfl(n_discoveries ~ index, d_discoveries)
+summary(model_zinf)
 
-```
-There doesnt appear to be a difference between the models.
-
-```{r}
 #calculate model predictions
-model_disp_pred <- predict(model_disp, type = "response")
+model_zinf_pred <- predict(model_zinf, type = "response")
 
 #transform into time series
-disc_pred_disp <- ts(model_disp_pred, start = c(1860, 1), end = c(1959, 1), frequency = 1)
+disc_zinf <- ts(model_zinf_pred, start = c(1860, 1), end = c(1959, 1), frequency = 1)
 
+#plot prediction 
 plot(discoveries)
-points(disc_pred_disp, pch = 20, col = "green")
+points(disc_zinf, pch = 20, col = "red")
 
-
-```
-Lastly we try a zero-inflated regression. It is similar in application to Poisson regression, but allows for an abundance of zeros in the dependent count variable
-```{r}
-model_zinf <- zeroinfl(discoveries ~ 1, data = discoveries, dist = "poisson")
-summary.glm(model_zinf)
-
-par(mfrow = c(2, 2))
-plot(model_zinf)
-
-```
-
-
-
-
-
-
-
-
-We noticed earlier how the trend changes after 1930. It would be interesting to fit the model to the pre-1930s data and see how the model prediction after 1930 differs from actual number of discoveries
-```{r}
-#disc_pre1930
-
-model3 <- glm(disc_pre1930 ~ ., family = poisson(link = "log"), data = disc_pre1930)
-summary(model3)
+#plot residuals
+plot(residuals(model_zinf))
+abline(0, 0, col = "blue")
 ```
 ```{r}
+#lastly we try a hurdle model 
+model_h <- hurdle(n_discoveries ~ index, d_discoveries)
+summary(model_h)
+
 #calculate model predictions
-model_pre1930 <- predict(model3, type = "response")
+model_h_pred <- predict(model_h, type = "response")
 
 #transform into time series
-disc_pre1930 <- ts(model_pre1930, start = c(1860, 1), end = c(1960, 1), frequency = 1)
+disc_h <- ts(model_h_pred, start = c(1860, 1), end = c(1959, 1), frequency = 1)
 
+#plot prediction 
 plot(discoveries)
-points(disc_pre1930, pch = 20, col = "blue")
-plot(disc_pre1930, col = "blue")
+points(disc_h, pch = 20, col = "red")
 
+#plot residuals
+plot(residuals(model_h))
+abline(0, 0, col = "blue")
 ```
 
-second try 
-```{r}
-??crossbasis
-```
+
+
 
 
 

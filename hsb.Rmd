@@ -1,0 +1,142 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Problem 2:  The hsb data in the faraway package is a subset of the High School and Beyond study.  The variables are school type, socioeconomic status, school type, chosen high school program type, scores in certain classes.  Present any tables or plots you may find relevant to this analysis.  The goal is to fit a model that explains a persons program choice type based on the observed variables.  Investigate the coefficients and comment on any interesting findings.  This is a multinomial model with program type as a response (3 levels). 
+
+```{r}
+library(nnet)
+library(dplyr)
+library(tidyr)
+data("hsb")
+```
+
+Explore the data 
+```{r}
+head(hsb)
+summary(hsb)
+```
+```{r}
+#plots and cor for numeric variables only 
+pairs(hsb[, c(7, 8, 9, 10, 11)])
+cor(hsb[, c(7, 8, 9, 10, 11)])
+```
+
+```{r}
+gender <- table(hsb$gender, hsb$prog)
+gender
+prop.table(gender) #cell percentages
+prop.table(gender, 1) #row percentages
+prop.table(gender, 2) #column percentages
+
+gender_x <- xtabs(~ gender + prog, data = hsb)
+ftable(gender_x)
+summary(gender_x)
+```
+Strong evidence of independence between choice of program and gender since p-value is large
+```{r}
+ses_x <- xtabs(~ ses + prog, data = hsb)
+ftable(ses_x)
+summary(ses_x)
+```
+p-value is 0.002 providing some evidence of dependence between social economic status and choice of program 
+
+
+We will first use gender, race, ses, schtype as the predictors and use the program as the response. We will then add the academic variables later on. 
+```{r}
+model0 <- multinom(prog ~ gender + race + ses + schtyp, hsb)
+```
+
+```{r}
+model1 <- step(model0)
+```
+The selected model based on AIC is the one with socio economic status and school type. We can use the standard likelihood method to compare the reduced model with the larger one and we get the same conclusion that gender and race is not significant relative to the full model. 
+```{r}
+model0
+model1
+anova(model1, model0)
+```
+```{r}
+summary(model1)
+```
+The first row of coefficients is comparing general program to the baseline academic program and the second row is comparing vocational to academic. 
+
+The log odds of being in general vs academic program will increase by 0.51 when going from private to public school; 
+
+The log odds of being in general program vs in academic program will increase by 0.78 when going from high to middle socioeconomic status and increase by 1.3 when going from high to low socioeconomic status.
+
+
+
+```{r}
+model1_pred <- predict(model1, hsb, type = "probs")
+predictions <- data.frame(model1_pred, ses = hsb$ses, schtyp = hsb$schtyp)
+predict <- gather(predictions, program, probability, -ses, -schtyp)
+
+```
+
+
+
+
+```{r}
+ggplot(predict, aes(x = program, y = probability, color = ses)) + 
+        geom_point()
+```
+```{r}
+table(predict(model1), hsb$prog)
+
+105/(200)
+```
+Only 52% of the data is correctly classified. We will next add all the variables to try to improve the model. 
+```{r}
+#inital model 
+model2 <- multinom(prog ~ gender + race + ses + schtyp + read + write + math + 
+    science + socst, hsb)
+
+#AIC
+#model3 <- step(model2)
+
+#selected model has the following predictors: ses + schtyp + math + science + socst
+#confirm with anova 
+anova(model3, model2)
+
+summary(model3)
+```
+```{r}
+model3_pred <- predict(model3, hsb, type = "probs")
+predictions3 <- data.frame(model3_pred, hsb$ses, hsb$schtyp, hsb$math, hsb$science, hsb$socst)
+predict3 <- gather(predictions3, program, probability, -(4:8))
+predict3
+```
+```{r}
+ggplot(predict3, aes(x = hsb.math, y = probability, group = program, color = program)) + 
+        geom_point() + 
+        geom_smooth()
+```
+```{r}
+ggplot(predict3, aes(x = hsb.science, y = probability, group = program, color = program)) + 
+        geom_point() + 
+        geom_smooth()
+```
+```{r}
+ggplot(predict3, aes(x = hsb.socst, y = probability, group = program, color = program)) + 
+        geom_point() + 
+        geom_smooth()
+```
+```{r}
+ggplot(predict3, aes(x = program, y = probability, color = hsb.schtyp)) + 
+        geom_boxplot()
+```
+```{r}
+ggplot(predict3, aes(x = program, y = probability, color = hsb.ses)) + 
+        geom_boxplot()
+```
+```{r}
+table(predict(model3), hsb$prog)
+(87+10+29)/200
+
+pred_x <- xtabs(~ predict(model3) + hsb$prog)
+ftable(pred_x)
+```
+
+
