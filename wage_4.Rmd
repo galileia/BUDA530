@@ -1,0 +1,188 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+#packages and data
+install.packages("cowplot")
+install.packages("effects")
+
+library(effects) #for plotting residuals
+library(cowplot) #for plotting ggplots side by side
+library(groupdata2) #for partitions and generate folds 
+library(hydroGOF) #for rmse()
+library(gam)
+library(mgcv)
+
+data("Wage")
+```
+```{r}
+#resources ## move to the end 
+#cowplot
+https://cran.r-project.org/web/packages/cowplot/vignettes/plot_grid.html
+https://cran.r-project.org/web/packages/cowplot/vignettes/shared_legends.html
+
+```
+
+
+
+
+```{r}
+#only one region so remove region. will use wage so remove logwage
+wage_tbl <- select(Wage, -region, -logwage)
+head(wage_tbl)
+```
+We start by looking at how the response relates to the continous predictor variables. There is a clear non-linear relationship between wage and age but these plots only show the relationship without taking the account the impact of the other predictors. 
+```{r}
+#plot age and year vs wage
+age_plot <- ggplot(wage_tbl, aes(x = age, y = wage)) + geom_point(size = 1) + geom_smooth(method = "loess", se = TRUE)
+year_plot <- ggplot(wage_tbl, aes(x = year, y = wage)) + geom_point(size = 1) + geom_smooth(method = "loess", se = TRUE)
+
+#side by side plots 
+plot_grid(age_plot, year_plot, labels = "AUTO")
+```
+We first build a linear model for reference purposes. We see that most of the coefficients are significant but as expected the model has a low $r^2$ since it's not taking into account the non-linear relationship of wage vs age
+```{r}
+#linear model 
+wage_linear_mdl <- lm(wage ~ year + age + maritl + race + education + jobclass + health + health_ins, data = wage_tbl)
+
+#summary
+summary(wage_linear_mdl)
+
+```
+
+We will now fit several non-linear models using GAM. 
+
+We start off by using smoothing splines with 1 df for `year` and 3 for `age`. All the qualitative variables get converted into dummy variables. 
+```{r}
+#gam using smoothing splines
+wage_gam_mdl_1 <- gam(wage ~ s(year, k = 5) + s(age, k = 10) + maritl + race + education + jobclass + health + health_ins, data = wage_tbl)
+
+#summary
+summary(wage_gam_mdl_1)
+```
+```{r}
+AIC(wage_linear_mdl, wage_gam_mdl_1)
+```
+
+```{r}
+#plots
+par(mfrow = c(1, 2))
+plot(wage_gam_mdl_1, se = TRUE, select = 1, col = "red")
+plot(wage_gam_mdl_1, se = TRUE, select = 2, col = "red")
+
+```
+We will experiment with different df for `year` and use cross validation to select k that results in the least RMSE
+
+```{r}
+#we first subset the data into training and testing datasets
+
+#set seed for reproducibility
+set.seed(123)
+
+#split data into 20/80
+parts <- partition(wage_tbl, p = 0.2)
+
+test_set <- parts[[1]]
+train_set <- parts[[2]]
+head(train_set)
+
+#we will now create 10 folds for cross validation
+train_set <- fold(train_set, k = 5)
+head(train_set)
+```
+
+```{r}
+
+k = 5
+results <- c()
+for(fold in 1:k) {
+        training_set <- train_set[train_set$.folds != fold,]
+        testing_set <- train_set[train_set$.folds == fold,]
+        
+        model <- gam(wage ~ s(year, k = 1) + s(age, k = k) + maritl + race + education + jobclass +
+                                      health + health_ins, data = training_set)
+        
+        predicted <- predict(model, testing_set)
+        
+        predicted <- as.numeric(predicted)
+        
+        RMSE <- rmse(predicted, testing_set$wage)
+        
+        results[fold] <- RMSE
+        }
+results
+c('RMSE' = mean(results))
+
+df <- c(1:5)
+
+plot(x = df, y = results)
+```
+We see that 2 df for `year` results in the least RMSE and increasing df results in higher RMSE. We validate the model using the testing data set. The RMSE is very close to the one we got with the testing data set. 
+```{r}
+wage_gam_mdl_2 <- gam(wage ~ s(year, k = 1) + s(age, k = 2) + maritl + race + education + jobclass + health + health_ins, data = test_set)
+
+predicted <- predict(wage_gam_mdl_2, test_set)
+
+predicted <- as.numeric(predicted)
+        
+RMSE_test <- rmse(predicted, test_set$wage)
+
+RMSE_test
+
+```
+```{r}
+summary(wage_gam_mdl_2)
+```
+
+We see a significant reduction in the model AIC
+```{r}
+AIC(wage_gam_mdl_1, wage_gam_mdl_2)
+```
+
+
+```{r}
+#plots
+par(mfrow = c(1, 2))
+plot(wage_gam_mdl_2, se = TRUE, select = 1, col = "red")
+plot(wage_gam_mdl_2, se = TRUE, select = 2, col = "red")
+```
+
+
+We will now look at several interactions between variables 
+```{r}
+names(wage_tbl)
+
+```
+
+```{r}
+wage_gam_mdl_3 <- gam(wage ~ s(year, k = 1) + s(age, k = 2) + maritl + race + education + jobclass + s(age, by = health), data = wage_tbl)
+
+k = 5
+results <- c()
+for(fold in 1:k) {
+        training_set <- train_set[train_set$.folds != fold,]
+        testing_set <- train_set[train_set$.folds == fold,]
+        
+        model <- gam(wage ~ s(year, k = 1) + s(age, k = 2) + maritl + race + education + jobclass + s(age, by = health), data = training_set)
+        
+        predicted <- predict(model, testing_set)
+        
+        predicted <- as.numeric(predicted)
+        
+        RMSE <- rmse(predicted, testing_set$wage)
+        
+        results[fold] <- RMSE
+        }
+results
+c('RMSE' = mean(results))
+
+
+
+summary(wage_gam_mdl_3)
+
+AIC(wage_gam_mdl_2, wage_gam_mdl_3)
+```
+Avg RMSE is higher than model 2, also AIC is much higher 
+
